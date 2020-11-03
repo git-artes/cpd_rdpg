@@ -3,3 +3,5 @@
 This is an implementation of the algorithm described in ``Change point localization in dependent dynamic nonparametric random dot product graphs'' by Oscar Hernan Madrid Padilla, Yi Yu, Carey E. Priebe (preprint available at https://arxiv.org/abs/1911.07494). 
 
 It depends on libraries typically available on most modern Python distributions, with the exception of Graspy (now Graspologic). Visit https://graspy.neurodata.io/ (and change the import calls). 
+
+I have included the main module and a simple example we've used to generate some of the graphs in a paper submitted to ICASSP 2021. 
