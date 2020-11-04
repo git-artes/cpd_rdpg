@@ -124,7 +124,7 @@ for i in np.arange(T-cps_reales[2]):
 
 tau = np.log(len(grafos)*np.sum(n)/2)/3
 
-algo = cpd.nrdpgwbs(tau, 10, d=1)
+algo = cpd.nrdpgwbs(tau, 20, d=1)
 #algo = cpd.nrdpgwbs(2,10)
 algo.fit(grafos,shuffle=False)
 plt.plot(algo.Y)
