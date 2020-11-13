@@ -67,7 +67,7 @@ plt.close(fig='all')
 
 grafos = []
 
-n = [50, 50]
+n = [200, 200]
 cps_reales = [30, 50, 80]
 T = cps_reales[-1]+30
 
@@ -122,9 +122,9 @@ for i in np.arange(T-cps_reales[2]):
     weights = perm.T@weights@perm
     grafos.append(nx.from_numpy_array(weights,create_using=nx.DiGraph()))       
 
-tau = np.log(len(grafos)*np.sum(n)/2)/3
+tau = np.log(len(grafos)*np.sum(n)/2)/4
 
-algo = cpd.nrdpgwbs(tau, 20, d=1)
+algo = cpd.nrdpgwbs(tau, 10, d=1)
 #algo = cpd.nrdpgwbs(2,10)
 algo.fit(grafos,shuffle=False)
 plt.plot(algo.Y)

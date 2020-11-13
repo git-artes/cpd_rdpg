@@ -49,7 +49,7 @@ class nbs():
         
     def compute_statistic(self,s,e):
         """
-        Computes the D^t_{s,e} statistic for all t between s+1 and e-1. 
+        Computes the D^t_{s,e} statistic for all t between s+1 and e-1 and outputs the maximum. 
         """
         
 #        Y = self.Y[s:e+1,:]
@@ -57,10 +57,20 @@ class nbs():
         
         statistic = -np.inf
         t_aster = 0
+        
+        ns = 0
+        if s>0:
+            ns = np.sum(self.nt[0:s])
+        ne = np.sum(self.nt[0:e])
         for t in np.arange(s+1,e):
             # aca parece haber un error porque no detecta los cambios cuando t esta desbalanceado
 #            Dt = np.sqrt((t-s+1)*nt*(e-t)*nt/((e-s+1)*nt))*np.max(np.abs(self.ecdf(s,t,e)))
-            Dt = np.sqrt( np.sum(self.nt[s:t+1])*np.sum(self.nt[t+1:e+1])/np.sum(self.nt[s:e+1]) )*np.max(np.abs(self.ecdf(s,t,e)))
+            
+            nt = np.sum(self.nt[0:t])
+            # Dt = np.sqrt( np.sum(self.nt[s:t+1])*np.sum(self.nt[t+1:e+1])/np.sum(self.nt[s:e+1]) )*np.max(np.abs(self.ecdf(s,t,e)))
+            (ksdist,pvalue) = scipy.stats.kstest(self.Y_concatenated[ns:nt],self.Y_concatenated[nt:ne])
+            Dt = np.sqrt( np.sum(self.nt[s:t+1])*np.sum(self.nt[t+1:e+1])/np.sum(self.nt[s:e+1]) )*ksdist
+            
 #            print("D["+str(t)+"]="+str(Dt))
             if Dt>statistic:
                 statistic = Dt
@@ -87,6 +97,11 @@ class nbs():
 #        return self.estimated_change_points
         
     def ecdf(self,s,t,e):
+        """
+        Deprecated. I used it to calculate the KS distance, but then I found that scipy
+        had a function to calculate it (much faster!). I'm leaving it here just in case. 
+        """
+        
 #        datas = self.Y[s:t,:].reshape(-1)
 #        datae = self.Y[t:e,:].reshape(-1)
 #        data = self.Y[s:e,:].reshape(-1)
@@ -198,7 +213,7 @@ class nrdpgwbs(nwbs):
         # the embedding method
         self.d = d
         # self.ase = gy.embed.AdjacencySpectralEmbed(n_components=self.d)
-        self.ase = gy.embed.AdjacencySpectralEmbed(n_elbows=1)
+        self.ase = gy.embed.AdjacencySpectralEmbed(n_elbows=2)
         
     def fit(self,graphs,nodes=None,dims=None,outin='both',shuffle=False):
         """
@@ -275,6 +290,8 @@ class nrdpgwbs(nwbs):
                 Xhatout, Xhatin = Xhats
                 Xhatl = Xhatout
                 Xhatr = Xhatin
+                
+                (Xhatl,Xhatr) = normalize_rdpg_directive(Xhatl,Xhatr)
                 if outin=='in':
                     Xhatl = Xhatin
                     Xhatr = Xhatin
@@ -295,6 +312,14 @@ class nrdpgwbs(nwbs):
             
         
         super(nrdpgwbs, self).fit(Y)
+        
+def normalize_rdpg_directive(Xhatl,Xhatr):
+    dims = Xhatl.shape[1]
+    for d in np.arange(dims):
+        factor = np.sqrt(np.max(Xhatl[:,d])/np.max(Xhatr[:,d]))
+        Xhatl[:,d] = Xhatl[:,d]/factor
+        Xhatr[:,d] = Xhatr[:,d]*factor
+    return (Xhatl, Xhatr)
         
 #        self.Y = Y
 #        self.flag = 0
