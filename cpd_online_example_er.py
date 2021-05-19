@@ -29,7 +29,7 @@ plt.close(fig='all')
 grafos_historicos = []
 
 # you may try changing n and/or the probabilities
-n = 10
+n = 100
 p1 = 0.7
 cp = True
 if cp:
@@ -81,18 +81,8 @@ plt.grid()
 ############################
 # I now estimate the intervals where the signal error should live
 ############################
-sigma_entries = cusum.estimate_adjacency_variance()
-(error_norm_sq, error_norm_ij) = cusum.cross_validate_model_error(grafos_historicos)
 
-wmk = n*(k**exp)
-
-m_k = np.sum(sigma_entries)*k + error_norm_sq*(k**2)
-m_k = m_k/wmk
-
-# var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
-var_k = 2*np.square(np.linalg.norm(sigma_entries,2))*(k**2) + 4*np.dot(sigma_entries,error_norm_ij)*(k**3)
-var_k =var_k/wmk**2
-sigma = np.sqrt(var_k)
+(m_k, sigma) = cusum.estimate_confidence_intervals(weighted=False, graphs=grafos_historicos)
 
 #plt.hlines([np.sqrt(scipy.stats.chi2.ppf(0.999,df=n*(n-1)/2)*p1*(1-p1)), np.sqrt(scipy.stats.chi2.ppf(0.001,df=n*(n-1)/2)*p1*(1-p1))],0,len(signal_errors),color='red')
 
@@ -111,6 +101,7 @@ error_norm = np.linalg.norm(epsilon)**2
 
 
 m_k2 = p_est*(1-p_est)*df*k + error_norm*(k**2)
+wmk = n*(k**exp)
 m_k2 = m_k2/wmk
 
 var_k2 = p_est*(1-p_est)*(2*df*p_est*(1-p_est)*(k**2) + 4*error_norm*(k**3))

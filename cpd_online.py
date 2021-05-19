@@ -351,6 +351,25 @@ class cpd_online_CUSUM():
         
         return (error_norm_sq, error_norm_ij)
     
+    def estimate_confidence_intervals(self, weighted=False, graphs=[]):
+        
+        sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs)
+        
+        t = np.arange(1,self.k+1)
+        
+        wmk = self.n*(t**self.exp)
+        
+        m_k = np.sum(sigma_entries)*t + error_norm_sq*(t**2)
+        m_k = m_k/wmk
+        
+        # var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
+        var_k = 2*np.square(np.linalg.norm(sigma_entries,2))*(t**2) + 4*np.dot(sigma_entries,error_norm_ij)*(t**3)
+        var_k =var_k/wmk**2
+        sigma_k = np.sqrt(var_k)
+        
+        return (m_k, sigma_k)
+    
 class cpd_online_mMOSUM(cpd_online_CUSUM):
     
     def __init__(self, alpha=0.05, hfun = 'grad', bw=0.4):

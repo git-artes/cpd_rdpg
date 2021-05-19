@@ -86,18 +86,7 @@ plt.grid()
 
 ######## the intervals are estimated
 
-sigma_entries = cusum.estimate_adjacency_variance(weighted=True, graphs=grafos_historicos)
-(error_norm_sq, error_norm_ij) = cusum.cross_validate_model_error(grafos_historicos)
-
-wmk = np.sum(n)*(k**exp)
-
-m_k = np.sum(sigma_entries)*k + error_norm_sq*(k**2)
-m_k = m_k/wmk
-
-# var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
-var_k = 2*np.square(np.linalg.norm(sigma_entries,2))*(k**2) + 4*np.dot(sigma_entries,error_norm_ij)*(k**3)
-var_k =var_k/wmk**2
-sigma = np.sqrt(var_k)
+(m_k, sigma) = cusum.estimate_confidence_intervals(weighted=True, graphs=grafos_historicos)
 
 ########## plot the results 
 
