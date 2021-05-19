@@ -232,7 +232,7 @@ class cpd_online_CUSUM():
         
         return current_H
     
-    def estimate_adjacency_variance(self, weighted=False):
+    def estimate_adjacency_variance(self, weighted=False, graphs=[]):
         """
         Estimate the variance of the entries of the adjacency matrix. If the 
         graph is not weighted, this amounts to p_{ij}(1-p_{ij}), and p_{ij} 
@@ -248,6 +248,10 @@ class cpd_online_CUSUM():
         ----------
         weighted : boolean, optional
             If the graphs are weighted or not. The default is False.
+        graphs : list of networkx graphs, optional
+            If the graphs are directed, then you have to provide the historical dataset
+            since we do not keep it as an attribute. 
+            
 
         Returns
         -------
@@ -266,10 +270,10 @@ class cpd_online_CUSUM():
                 pass
         else: 
             if not self.directed:
-                (avg_graph_np, Xhat0_quad) = compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in grafos_historicos])
+                (avg_graph_np, Xhat0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in graphs])
                 Q = self.compute_Q(avg_graph_np, Xhat0_quad.shape[1])
                 
-                P_quad = Xhat_quad0@Q@cusum_quad.Xhat0.T
+                P_quad = Xhat0_quad@Q@Xhat0_quad.T
                 sigma_entries = P_quad - (self.Phat)**2
                 sigma_entries = sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)]
             else: 
