@@ -9,7 +9,7 @@ Created on Fri Jul 31 02:13:28 2020
 import numpy as np
 import scipy
 import numpy.matlib
-import graspy as gy
+import graspologic as gy
 import networkx as nx
 import matplotlib.pyplot as plt
 from itertools import tee
@@ -212,8 +212,8 @@ class nrdpgwbs(nwbs):
         
         # the embedding method
         self.d = d
-        # self.ase = gy.embed.AdjacencySpectralEmbed(n_components=self.d)
-        self.ase = gy.embed.AdjacencySpectralEmbed(n_elbows=2)
+        # self.ase = gy.embed.AdjacencySpectralEmbed(n_components=1)
+        self.ase = gy.embed.AdjacencySpectralEmbed(n_elbows=2, algorithm='full')
         
     def fit(self,graphs,nodes=None,dims=None,outin='both',shuffle=False):
         """
@@ -259,6 +259,7 @@ class nrdpgwbs(nwbs):
         Y = [np.zeros(int(np.floor(num_nodes/2))) for num_nodes in n]
         for t in np.arange(T):
             g = nx.to_numpy_array(graphs[t])
+            g = gy.utils.augment_diagonal(g)
             Xhats = self.ase.fit_transform(g)
             if (type(Xhats)!=tuple):
                 Xhat = Xhats
