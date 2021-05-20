@@ -311,7 +311,7 @@ class cpd_online_CUSUM():
             After computing each error matrix, we take the squared norm, divide by `len(graphs)` and return a certain quantile 
             over all random selections.
         error_norm_ij : numpy array of shape (n*(n-1)/2,) (if undirected) or (n*(n-1)) (if directed). 
-            The entry-wise mean of the absolute error matrix (divided by `len(graphs)`).
+            The entry-wise quantile of the absolute error matrix (divided by `len(graphs)`).
 
         """
         errors_cv = []
@@ -327,14 +327,14 @@ class cpd_online_CUSUM():
                 # I'll use the d (dimension) obtained from the historic data
                 d = self.Xhat0.shape[1]
                 
-                (avg_graph_np, Xhat_one_out) = self.compute_avg_graph_and_embed(graphs_one_out, d)
-                Q_one_out = self.compute_Q(avg_graph_np, d)
-                P_one_out = Xhat_one_out[:,0:d]@Q_one_out@Xhat_one_out[:,0:d].T
+                (avg_graph_np, Xhat_one_out) = self.compute_avg_graph_and_embed(graphs_one_out,d)
+                Q_one_out = self.compute_Q(avg_graph_np, Xhat_one_out.shape[1])
+                P_one_out = Xhat_one_out@Q_one_out@Xhat_one_out.T
             
-                (avg_graph_np, Xhat_one) = self.compute_avg_graph_and_embed([graphs[idx]], d)
-                Q_one = self.compute_Q(avg_graph_np, d)
+                (avg_graph_np, Xhat_one) = self.compute_avg_graph_and_embed([graphs[idx]],d)
+                Q_one = self.compute_Q(avg_graph_np, Xhat_one.shape[1])
 
-                P_one = Xhat_one[:,0:d]@Q_one@Xhat_one[:,0:d].T
+                P_one = Xhat_one@Q_one@Xhat_one.T
             
                 E = P_one_out - P_one
                 E_vec = E[np.triu_indices(E.shape[0], 1)]
@@ -347,14 +347,34 @@ class cpd_online_CUSUM():
                 pass
             
         error_norm_sq = np.quantile(errors_cv_sq, 0.99)
-        error_norm_ij = np.mean(np.array(errors_cv)**2/len(graphs),axis=0)
+        error_norm_ij = np.quantile(np.array(errors_cv)**2/len(graphs),0.99, axis=0)
         
         return (error_norm_sq, error_norm_ij)
     
-    def estimate_confidence_intervals(self, weighted=False, graphs=[]):
-        
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20):
+        """
+        Given the current `k` state of the algorithm, it computes a whole confidence interval from 
+        0 to k (current time). 
+
+        Parameters
+        ----------
+        weighted : bool, optional
+            Whether the graphs are weighted. The default is False.
+        graphs : list of networkx graphs, optional
+            The historic dataset, which we are not keeping as a class attribute. The default is [].
+        nboots : int, optional
+            The number of iterations to estimate the errors involved. The default is 20.
+
+        Returns
+        -------
+        m_k : 1-d numpy array. 
+            The error signal's estimated mean from k=0 to the current time.
+        sigma_k : 1-d numpy array.
+            The error signal's estimated standard deviation from k=0 to the current time.
+
+        """
         sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
-        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs)
+        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
         
         t = np.arange(1,self.k+1)
         
