@@ -111,7 +111,7 @@ class cpd_online_CUSUM():
     def compute_avg_graph_and_embed(self, graphs, d = None):
         """
         Given a list of networkx graphs, this method first computes the average adjacency matrix, and then 
-        the corresponding RDPG (the resulting Xhat or (Xhatl,Xhatr) depending on whether the matrix is symmetric or not). 
+        the corresponding RDPG (the resulting Xhat or (Xlhat,Xrhat) depending on whether the matrix is symmetric or not). 
 
         Parameters
         ----------
@@ -224,11 +224,10 @@ class cpd_online_CUSUM():
         elif self.hfun == 'resid':
             if self.directed:
                 current_H = (g_np - self.Xlhat0@self.Xrhat0.T)
+                np.fill_diagonal(current_H,0)
             else: 
                 current_H = (self.Xhat0@self.Q@self.Xhat0.T - g_np)
-            
-            # TODO this is wrong when the graph is directed !!!!!
-            current_H = np.triu(current_H,1)
+                current_H = np.triu(current_H,1)
         
         return current_H
     
@@ -266,8 +265,7 @@ class cpd_online_CUSUM():
             if not self.directed:
                 sigma_entries = sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)]
             else: 
-                # TODO complete this
-                pass
+                sigma_entries = np.concatenate([sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)], sigma_entries[np.tril_indices(sigma_entries.shape[0], 1)]])
         else: 
             if not self.directed:
                 (avg_graph_np, Xhat0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in graphs])
@@ -277,8 +275,11 @@ class cpd_online_CUSUM():
                 sigma_entries = P_quad - (self.Phat)**2
                 sigma_entries = sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)]
             else: 
-                # TODO complete this
-                pass
+                (avg_graph_np, Xhats0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in graphs])
+                
+                P_quad = Xhats0_quad[0]@Xhats0_quad[1].T
+                sigma_entries = P_quad - (self.Phat)**2
+                sigma_entries = np.concatenate([sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)], sigma_entries[np.tril_indices(sigma_entries.shape[0], 1)]])
             
         return sigma_entries
     
@@ -343,8 +344,20 @@ class cpd_online_CUSUM():
                 errors_cv_sq.append(np.linalg.norm(E_vec)**2/(len(graphs)))
                 
             else: 
-                # TODO do this!!!
-                pass
+                # I'll use the d (dimension) obtained from the historic data
+                d = self.Xlhat0.shape[1]
+                
+                (avg_graph_np, Xhats_one_out) = self.compute_avg_graph_and_embed(graphs_one_out,d)
+                P_one_out = Xhats_one_out[0]@Xhats_one_out[1].T
+            
+                (avg_graph_np, Xhats_one) = self.compute_avg_graph_and_embed([graphs[idx]],d)
+                P_one = Xhats_one[0]@Xhats_one[1].T
+            
+                E = P_one_out - P_one
+                E_vec = np.concatenate([E[np.triu_indices(E.shape[0], 1)], E[np.tril_indices(E.shape[0], 1)]])
+                
+                errors_cv.append(E_vec)
+                errors_cv_sq.append(np.linalg.norm(E_vec)**2/(len(graphs)))
             
         error_norm_sq = np.quantile(errors_cv_sq, 0.99)
         error_norm_ij = np.quantile(np.array(errors_cv)**2/len(graphs),0.99, axis=0)
