@@ -7,3 +7,5 @@ In this repository we share (and keep) implementations of some algorithms regard
 It depends on libraries typically available on most modern Python distributions (in particular NetworkX), with the exception of Graspologic. Visit https://graspologic.readthedocs.io/. 
 
 We have included the main modules and some simple examples we've used to generate some of the graphs of the associated papers. 
+
+Bernardo también es parte del equipo.
