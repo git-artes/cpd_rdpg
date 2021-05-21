@@ -8,4 +8,3 @@ It depends on libraries typically available on most modern Python distributions 
 
 We have included the main modules and some simple examples we've used to generate some of the graphs of the associated papers. 
 
-Bernardo también es parte del equipo.
