@@ -13,7 +13,8 @@ import scipy
 import random
 
 class cpd_online_CUSUM():
-    """An online CUSUM algorithm for sequences of graphs. """
+    """An online CUSUM algorithm for sequences of graphs. It keeps the sum of 
+    all previous signal errors (which may be either the gradient or the residual)."""
     
     def __init__(self, exp=3/2, hfun = 'resid'):
         """
@@ -405,8 +406,8 @@ class cpd_online_CUSUM():
     
 class cpd_online_mMOSUM(cpd_online_CUSUM):
     
-    def __init__(self, alpha=0.05, hfun = 'grad', bw=0.4):
-        cpd_online_CUSUM.__init__(self,alpha, hfun)
+    def __init__(self, exp=3/2, hfun = 'grad', bw=0.4):
+        cpd_online_CUSUM.__init__(self,exp, hfun)
         self.bw = bw
         
         self.historic_H = None
@@ -437,23 +438,59 @@ class cpd_online_mMOSUM(cpd_online_CUSUM):
         
         self.S = np.sum(self.historic_H,axis=2)
         
-        wmk = 0
-        if self.k>np.sqrt(self.m):
-            # wmk = np.sqrt(self.m)*(1+self.k/self.m)**(-1)*(self.k/(self.m+self.k))**(-gamma)
-            wmk = (1/np.sqrt(self.m))*(1+self.k/self.m)**(-1)
-        # wmk = 1/self.k
-        wmk = 1/np.sqrt(n_samples)
-        # return wmk**2*np.linalg.norm(self.S)
-        return wmk*np.linalg.norm(self.S)        
+        wmk = self.n*(n_samples**self.exp)
+        
+        return np.linalg.norm(self.S)**2/wmk
+    
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20):
+        """
+        Given the current `k` state of the algorithm, it computes a whole confidence interval from 
+        0 to k (current time). 
+
+        Parameters
+        ----------
+        weighted : bool, optional
+            Whether the graphs are weighted. The default is False.
+        graphs : list of networkx graphs, optional
+            The historic dataset, which we are not keeping as a class attribute. The default is [].
+        nboots : int, optional
+            The number of iterations to estimate the errors involved. The default is 20.
+
+        Returns
+        -------
+        m_k : 1-d numpy array. 
+            The error signal's estimated mean from k=0 to the current time.
+        sigma_k : 1-d numpy array.
+            The error signal's estimated standard deviation from k=0 to the current time.
+
+        """
+        sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
+        
+        t = np.arange(1,self.k+1)
+        n_samples = (np.ceil(self.bw*t)).astype('int')
+        
+        wmk = self.n*(n_samples**self.exp)
+        
+        m_k = np.sum(sigma_entries)*n_samples + error_norm_sq*(n_samples**2)
+        m_k = m_k/wmk
+        
+        # var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
+        var_k = 2*np.square(np.linalg.norm(sigma_entries,2))*(n_samples**2) + 4*np.dot(sigma_entries,error_norm_ij)*(n_samples**3)
+        var_k =var_k/wmk**2
+        sigma_k = np.sqrt(var_k)
+        
+        return (m_k, sigma_k)
     
 class cpd_online_MOSUM(cpd_online_CUSUM):
-    def __init__(self, alpha=0.05, hfun = 'grad'):
-        cpd_online_CUSUM.__init__(self,alpha, hfun)
+    def __init__(self, exp=3/2, hfun = 'grad', win_relative=1):
+        cpd_online_CUSUM.__init__(self,exp, hfun)
         self.historic_H = None
+        self.win_relative = win_relative
         
-    def init(self, graphs, win=1):
+    def init(self, graphs):
         super().init(graphs)
-        self.win = self.m*win
+        self.win = self.m*self.win_relative
         
     def reset(self):
         cpd_online_CUSUM.reset(self)
@@ -473,12 +510,47 @@ class cpd_online_MOSUM(cpd_online_CUSUM):
 
         self.S = np.sum(self.historic_H,axis=2)
         
-        wmk = 0
-        if self.k>np.sqrt(self.m):
-            # wmk = np.sqrt(self.m)*(1+self.k/self.m)**(-1)*(self.k/(self.m+self.k))**(-gamma)
-            # wmk = (1/np.sqrt(self.m))*(1+self.k/self.m)**(-1)
-            wmk = (2*max(1,np.log(1+self.k/self.win)))**(-0.5)
-        wmk = 1/np.sqrt(self.win)
-        # wmk = 1/self.k
-        # return wmk**2*np.linalg.norm(self.S)
-        return wmk*np.linalg.norm(self.S)        
+        win = np.minimum(self.win,self.k)
+        wmk = self.n*(win**self.exp)
+        
+        return np.linalg.norm(self.S)**2/wmk
+    
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20):
+        """
+        Given the current `k` state of the algorithm, it computes a whole confidence interval from 
+        0 to k (current time). 
+
+        Parameters
+        ----------
+        weighted : bool, optional
+            Whether the graphs are weighted. The default is False.
+        graphs : list of networkx graphs, optional
+            The historic dataset, which we are not keeping as a class attribute. The default is [].
+        nboots : int, optional
+            The number of iterations to estimate the errors involved. The default is 20.
+
+        Returns
+        -------
+        m_k : 1-d numpy array. 
+            The error signal's estimated mean from k=0 to the current time.
+        sigma_k : 1-d numpy array.
+            The error signal's estimated standard deviation from k=0 to the current time.
+
+        """
+        sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
+        
+        t = np.arange(1,self.k+1)
+        win = np.minimum(self.win*np.ones_like(t),t)
+        
+        wmk = self.n*(win**self.exp)
+        
+        m_k = np.sum(sigma_entries)*win + error_norm_sq*(win**2)
+        m_k = m_k/wmk
+        
+        # var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
+        var_k = 2*np.square(np.linalg.norm(sigma_entries,2))*(win**2) + 4*np.dot(sigma_entries,error_norm_ij)*(win**3)
+        var_k =var_k/wmk**2
+        sigma_k = np.sqrt(var_k)
+        
+        return (m_k, sigma_k)
