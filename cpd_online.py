@@ -405,6 +405,8 @@ class cpd_online_CUSUM():
         return (m_k, sigma_k)
     
 class cpd_online_mMOSUM(cpd_online_CUSUM):
+    """An online mMOSUM algorithm for sequences of graphs. It keeps a FIFO queue of variable size of 
+    all previous signal errors (which may be either the gradient or the residual)."""
     
     def __init__(self, exp=3/2, hfun = 'grad', bw=0.4):
         """
@@ -529,6 +531,10 @@ class cpd_online_mMOSUM(cpd_online_CUSUM):
         return (m_k, sigma_k)
     
 class cpd_online_MOSUM(cpd_online_CUSUM):
+    """An online MOSUM algorithm for sequences of graphs. It keeps a FIFO queue of fixed size of 
+    all previous signal errors (which may be either the gradient or the residual)."""
+    
+    def __init__(self, exp=3/2, hfun = 'grad', win_relative=1):
         """
         It creates the MOSUM algorithm object. It will use a historic dataset to estimate the RDPG parameters 
         (and the resulting connectivity matrix). As new graphs are input, a monitoring function is computed and 
@@ -549,8 +555,7 @@ class cpd_online_MOSUM(cpd_online_CUSUM):
         -------
         None.
 
-        """
-    def __init__(self, exp=3/2, hfun = 'grad', win_relative=1):
+        """        
         cpd_online_CUSUM.__init__(self,exp, hfun)
         self.historic_H = None
         self.win_relative = win_relative
