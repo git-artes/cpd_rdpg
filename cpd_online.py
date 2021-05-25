@@ -407,16 +407,62 @@ class cpd_online_CUSUM():
 class cpd_online_mMOSUM(cpd_online_CUSUM):
     
     def __init__(self, exp=3/2, hfun = 'grad', bw=0.4):
+        """
+        It creates the mMOSUM algorithm object. It will use a historic dataset to estimate the RDPG parameters 
+        (and the resulting connectivity matrix). As new graphs are input, a monitoring function is computed and 
+        kept in a FIFO queue with variable length (of size `n_samples = int(np.ceil(self.bw*self.k))`). 
+        When the weighted frobenius norm of its sum exceeds a certain threshold, a CPD should be signalled. 
+
+        Parameters
+        ----------
+        exp : float, optional
+            The exponential to be used on the weights (wmk = n*(.k**.exp)). The default is 3/2.
+        hfun : str, optional
+            The type of monitoring function to use. Although both the residual ('resid') and the gradient ('grad') 
+            are valid, the former is preferred (and we've tested mostly with it) . The default is 'resid'.
+        bw : float, optional
+            The bandwidth of the mMOSUM algorithm. The size of the FIFO queue is a percentage of the current time, given by `bw`. 
+
+        Returns
+        -------
+        None.
+
+        """
         cpd_online_CUSUM.__init__(self,exp, hfun)
         self.bw = bw
         
         self.historic_H = None
     
     def reset(self):
+        """
+        Restarts the algorithm, but keeps the historic data and the resulting RDPG estimation. 
+
+        Returns
+        -------
+        None.
+
+        """
         cpd_online_CUSUM.reset(self)
         self.historic_H = None
     
     def new_graph(self,g):
+        """
+        Input a new graph to the mMOSUM object. I.e. it computes the corresponding monitoring function
+        and adds the result to the variable-size FIFO queue of residuals (with a size equal to
+        `n_samples = int(np.ceil(self.bw*self.k))`). It returns the resulting weighted squared Frobenius norm
+        of the sum (np.linalg.norm(self.S)**2/wmk). 
+
+        Parameters
+        ----------
+        g : A networkx graph. 
+            The new incoming graph.
+
+        Returns
+        -------
+        float
+            The resulting statistic.
+
+        """
         current_H = self.compute_current_H(g)
         
         if self.historic_H is None:
@@ -483,20 +529,81 @@ class cpd_online_mMOSUM(cpd_online_CUSUM):
         return (m_k, sigma_k)
     
 class cpd_online_MOSUM(cpd_online_CUSUM):
+        """
+        It creates the MOSUM algorithm object. It will use a historic dataset to estimate the RDPG parameters 
+        (and the resulting connectivity matrix). As new graphs are input, a monitoring function is computed and 
+        kept in a FIFO queue with length `win_relative` times the size of the historic data. 
+        When the weighted frobenius norm of its sum exceeds a certain threshold, a CPD should be signalled. 
+
+        Parameters
+        ----------
+        exp : float, optional
+            The exponential to be used on the weights (wmk = n*(.k**.exp)). The default is 3/2.
+        hfun : str, optional
+            The type of monitoring function to use. Although both the residual ('resid') and the gradient ('grad') 
+            are valid, the former is preferred (and we've tested mostly with it) . The default is 'resid'.
+        win_relative : float, optional
+            The size of the moving window. It is relative to the historic data's size.
+
+        Returns
+        -------
+        None.
+
+        """
     def __init__(self, exp=3/2, hfun = 'grad', win_relative=1):
         cpd_online_CUSUM.__init__(self,exp, hfun)
         self.historic_H = None
         self.win_relative = win_relative
         
     def init(self, graphs):
+        """
+        This method provides the historic dataset that is used to compute the RDPG parameters. 
+        Plus, it computes the window size. 
+
+        Parameters
+        ----------
+        graphs : list of networkx graphs. 
+            The historic dataset with m graphs.
+
+        Returns
+        -------
+        None.
+
+        """
         super().init(graphs)
         self.win = self.m*self.win_relative
         
     def reset(self):
+        """
+        Restarts the algorithm, but keeps the historic data and the resulting RDPG estimation. 
+
+        Returns
+        -------
+        None.
+
+        """
         cpd_online_CUSUM.reset(self)
         self.historic_H = None
         
     def new_graph(self,g):
+        """
+        Input a new graph to the MOSUM object. I.e. it computes the corresponding monitoring function
+        and adds the result to the FIFO queue of residuals (with a size equal to
+        `self.win = self.m*self.win_relative`). It returns the resulting weighted squared Frobenius norm
+        of the sum (np.linalg.norm(self.S)**2/wmk). 
+
+        Parameters
+        ----------
+        g : A networkx graph. 
+            The new incoming graph.
+
+        Returns
+        -------
+        float
+            The resulting statistic.
+
+        """
+        
         current_H = self.compute_current_H(g)
         
         if self.historic_H is None:
