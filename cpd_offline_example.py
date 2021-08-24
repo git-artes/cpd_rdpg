@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import cpd
 
-import graspy as gy
-import ruptures as rpt
+import graspologic as gy
+#import ruptures as rpt
 
 plt.close(fig='all')
 
