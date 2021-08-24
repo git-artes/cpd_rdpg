@@ -83,6 +83,7 @@ class cpd_online_CUSUM():
             
             self.Phat = self.Xhat0@self.Q@self.Xhat0.T
             
+        # self.Phat = np.maximum(np.minimum(self.Phat,1),0)
         self.k = 0
       
         
@@ -101,7 +102,6 @@ class cpd_online_CUSUM():
         Returns
         -------
         A numpy array of shape (d,d) with the sign of the corresponding eigenvalues. 
-            DESCRIPTION.
 
         """
         (w,v) = scipy.sparse.linalg.eigs(matrix, k=d,which='LM')
@@ -117,7 +117,7 @@ class cpd_online_CUSUM():
         Parameters
         ----------
         graphs : list of networkx graphs. 
-            The graphs for which the average and the resulting ASE should be computed.
+            The graphs for which the average and the resulting ASE should be computed. 
         d : int, optional
             The dimension of the resulting ASE. If None, it is automatically computed. The default is None.
 
@@ -133,7 +133,9 @@ class cpd_online_CUSUM():
         avg_graph_np = np.zeros((n,n))
         
         for g in graphs:
-            avg_graph_np = avg_graph_np + nx.to_numpy_array(g)
+            # I sort them, so that if nodes came in a different order they are assigned the same position
+            avg_graph_np = avg_graph_np + nx.to_numpy_array(g, nodelist=np.sort(g.nodes()))
+            # avg_graph_np = avg_graph_np + nx.to_numpy_array(g)
             
         avg_graph_np = avg_graph_np/len(graphs)
         avg_graph_np = gy.utils.augment_diagonal(avg_graph_np)
@@ -212,7 +214,9 @@ class cpd_online_CUSUM():
             The monitoring function evaluated at g (see the constructor to check what the monitoring function may be).
 
         """
-        g_np = nx.to_numpy_array(g)
+        # I sort them, so that if nodes came in a different order they are assigned the same position
+        g_np = nx.to_numpy_array(g, nodelist=np.sort(g.nodes()))
+        # g_np = nx.to_numpy_array(g)
         g_np = gy.utils.augment_diagonal(g_np)
         
         if self.hfun == 'grad':
@@ -249,7 +253,7 @@ class cpd_online_CUSUM():
         weighted : boolean, optional
             If the graphs are weighted or not. The default is False.
         graphs : list of networkx graphs, optional
-            If the graphs are directed, then you have to provide the historical dataset
+            If the graphs are weighted, then you have to provide the historical dataset
             since we do not keep it as an attribute. 
             
 
@@ -262,25 +266,40 @@ class cpd_online_CUSUM():
 
         """
         if not weighted:
-            sigma_entries = self.Phat*(1-self.Phat)
+            # sigma_entries = self.Phat*(1-self.Phat)
+            # As expected, when the graph is too sparse the embedding does not work. The 
+            # result is a too small variance. 
+            #TODO Look for a better lower-bound.
+            sigma_entries = np.minimum(np.maximum(self.Phat,1/self.n),1)*(1-np.minimum(np.maximum(self.Phat,1/self.n),1))
+            # sigma_entries = self.avg_graph_np*(1-self.avg_graph_np)
             if not self.directed:
                 sigma_entries = sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)]
             else: 
                 sigma_entries = np.concatenate([sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)], sigma_entries[np.tril_indices(sigma_entries.shape[0], 1)]])
         else: 
             if not self.directed:
-                (avg_graph_np, Xhat0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in graphs])
+                (avg_graph_np, Xhat0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g, nodelist=np.sort(g.nodes()))**2) for g in graphs])
+                # (avg_graph_np, Xhat0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in graphs])
                 Q = self.compute_Q(avg_graph_np, Xhat0_quad.shape[1])
                 
                 P_quad = Xhat0_quad@Q@Xhat0_quad.T
                 sigma_entries = P_quad - (self.Phat)**2
                 sigma_entries = sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)]
             else: 
-                (avg_graph_np, Xhats0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2) for g in graphs])
+                (avg_graph_np, Xhats0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g, nodelist=np.sort(g.nodes()))**2, create_using=nx.DiGraph) for g in graphs])
+                # (avg_graph_np, Xhats0_quad) = self.compute_avg_graph_and_embed([nx.from_numpy_array(nx.to_numpy_array(g)**2, create_using=nx.DiGraph) for g in graphs])
                 
                 P_quad = Xhats0_quad[0]@Xhats0_quad[1].T
                 sigma_entries = P_quad - (self.Phat)**2
                 sigma_entries = np.concatenate([sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)], sigma_entries[np.tril_indices(sigma_entries.shape[0], 1)]])
+                
+                # This is another possible estimate of the variance (basically E{(A-E{A})^2} instead of E{A^2}-E{A}^2 as before). 
+                # We think that the other one works better, but I'll leave the code here just in case. 
+                # quad_graphs = [nx.from_numpy_array((nx.to_numpy_array(g, nodelist=np.sort(g.nodes()))-self.Phat)**2, create_using=nx.DiGraph) for g in graphs]
+                # (avg_graph_np, Xhats0_quad) = self.compute_avg_graph_and_embed(quad_graphs)
+                # P_quad = Xhats0_quad[0]@Xhats0_quad[1].T
+                # sigma_entries = P_quad
+                # sigma_entries = np.concatenate([sigma_entries[np.triu_indices(sigma_entries.shape[0], 1)], sigma_entries[np.tril_indices(sigma_entries.shape[0], 1)]])
             
         return sigma_entries
     
@@ -319,10 +338,19 @@ class cpd_online_CUSUM():
         errors_cv = []
         errors_cv_sq = []
         
-        # for idx,g in enumerate(grafos_historicos):
-        for _ in np.arange(nboot):
+        if nboot < len(graphs):
+            indexes = np.random.choice(len(graphs), nboot, replace=False)
+        else:
+            indexes = np.arange(len(graphs))
             
-            idx = random.randint(0,len(graphs)-1)
+        indexes = np.random.choice(len(graphs), nboot)
+        
+        # print(indexes)
+        # for idx,g in enumerate(grafos_historicos):
+        # for _ in np.arange(nboot):
+        for idx in indexes:
+            
+            # idx = random.randint(0,len(graphs)-1)
             graphs_one_out = graphs[:idx] + graphs[idx+1:]
             
             if not self.directed:
@@ -339,10 +367,13 @@ class cpd_online_CUSUM():
                 P_one = Xhat_one@Q_one@Xhat_one.T
             
                 E = P_one_out - P_one
+                
+                # gy.plot.heatmap(E)
+                
                 E_vec = E[np.triu_indices(E.shape[0], 1)]
                 
                 errors_cv.append(E_vec)
-                errors_cv_sq.append(np.linalg.norm(E_vec)**2/(len(graphs)))
+                errors_cv_sq.append(np.linalg.norm(E_vec)**2/(len(graphs)-1))
                 
             else: 
                 # I'll use the d (dimension) obtained from the historic data
@@ -355,17 +386,21 @@ class cpd_online_CUSUM():
                 P_one = Xhats_one[0]@Xhats_one[1].T
             
                 E = P_one_out - P_one
+                
+                # gy.plot.heatmap(E)
+
                 E_vec = np.concatenate([E[np.triu_indices(E.shape[0], 1)], E[np.tril_indices(E.shape[0], 1)]])
                 
                 errors_cv.append(E_vec)
-                errors_cv_sq.append(np.linalg.norm(E_vec)**2/(len(graphs)))
+                errors_cv_sq.append(np.linalg.norm(E_vec)**2/(len(graphs)-1))
             
+        # print(errors_cv_sq)
         error_norm_sq = np.quantile(errors_cv_sq, 0.99)
         error_norm_ij = np.quantile(np.array(errors_cv)**2/len(graphs),0.99, axis=0)
         
         return (error_norm_sq, error_norm_ij)
     
-    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20):
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20, sigma_entries = None, error_norm_sq = None, error_norm_ij = None):
         """
         Given the current `k` state of the algorithm, it computes a whole confidence interval from 
         0 to k (current time). 
@@ -378,6 +413,14 @@ class cpd_online_CUSUM():
             The historic dataset, which we are not keeping as a class attribute. The default is [].
         nboots : int, optional
             The number of iterations to estimate the errors involved. The default is 20.
+        sigma_entries : numpy array of shape (n,n), optional
+            The variance of the adjancecy matrix. If None, it is estimated by this object. The default is None.
+        error_norm_sq : float, optional
+            The squared frobenius norm of the difference between the actual probability matrix and the 
+            one inferred from the historic data. If None, it is estimated by this object. The default is None.
+        error_norm_ij : numpy array of shape (n*(n-1)/2,) (if undirected) or (n*(n-1)) (if directed). 
+            The square of the difference between the actual probability matrix and the one inferred from the 
+            historic data. If None, it is estimated by this object. The default is None.            
 
         Returns
         -------
@@ -387,14 +430,19 @@ class cpd_online_CUSUM():
             The error signal's estimated standard deviation from k=0 to the current time.
 
         """
-        sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
-        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
+
+        if sigma_entries is None:
+            sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        if (error_norm_sq is None) or (error_norm_ij is None):
+            (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
         
         t = np.arange(1,self.k+1)
         
         wmk = self.n*(t**self.exp)
         
         m_k = np.sum(sigma_entries)*t + error_norm_sq*(t**2)
+        #print("np.sum(sigma_entries): "+str(np.sum(sigma_entries)))
+        #print("error_norm_sq: "+str(error_norm_sq))
         m_k = m_k/wmk
         
         # var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
@@ -490,7 +538,7 @@ class cpd_online_mMOSUM(cpd_online_CUSUM):
         
         return np.linalg.norm(self.S)**2/wmk
     
-    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20):
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20, sigma_entries = None, error_norm_sq = None, error_norm_ij = None):
         """
         Given the current `k` state of the algorithm, it computes a whole confidence interval from 
         0 to k (current time). 
@@ -503,7 +551,15 @@ class cpd_online_mMOSUM(cpd_online_CUSUM):
             The historic dataset, which we are not keeping as a class attribute. The default is [].
         nboots : int, optional
             The number of iterations to estimate the errors involved. The default is 20.
-
+        sigma_entries : numpy array of shape (n,n), optional
+            The variance of the adjancecy matrix. If None, it is estimated by this object. The default is None.
+        error_norm_sq : float, optional
+            The squared frobenius norm of the difference between the actual probability matrix and the 
+            one inferred from the historic data. If None, it is estimated by this object. The default is None.
+        error_norm_ij : numpy array of shape (n*(n-1)/2,) (if undirected) or (n*(n-1)) (if directed). 
+            The square of the difference between the actual probability matrix and the one inferred from the 
+            historic data. If None, it is estimated by this object. The default is None.
+            
         Returns
         -------
         m_k : 1-d numpy array. 
@@ -512,8 +568,11 @@ class cpd_online_mMOSUM(cpd_online_CUSUM):
             The error signal's estimated standard deviation from k=0 to the current time.
 
         """
-        sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
-        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
+        
+        if sigma_entries is None:
+            sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        if (error_norm_sq is None) or (error_norm_ij is None):
+            (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
         
         t = np.arange(1,self.k+1)
         n_samples = (np.ceil(self.bw*t)).astype('int')
@@ -576,7 +635,7 @@ class cpd_online_MOSUM(cpd_online_CUSUM):
 
         """
         super().init(graphs)
-        self.win = self.m*self.win_relative
+        self.win = int(self.m*self.win_relative)
         
     def reset(self):
         """
@@ -627,7 +686,7 @@ class cpd_online_MOSUM(cpd_online_CUSUM):
         
         return np.linalg.norm(self.S)**2/wmk
     
-    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20):
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20, sigma_entries = None, error_norm_sq = None, error_norm_ij = None):
         """
         Given the current `k` state of the algorithm, it computes a whole confidence interval from 
         0 to k (current time). 
@@ -640,6 +699,14 @@ class cpd_online_MOSUM(cpd_online_CUSUM):
             The historic dataset, which we are not keeping as a class attribute. The default is [].
         nboots : int, optional
             The number of iterations to estimate the errors involved. The default is 20.
+        sigma_entries : numpy array of shape (n,n), optional
+            The variance of the adjancecy matrix. If None, it is estimated by this object. The default is None.
+        error_norm_sq : float, optional
+            The squared frobenius norm of the difference between the actual probability matrix and the 
+            one inferred from the historic data. If None, it is estimated by this object. The default is None.
+        error_norm_ij : numpy array of shape (n*(n-1)/2,) (if undirected) or (n*(n-1)) (if directed). 
+            The square of the difference between the actual probability matrix and the one inferred from the 
+            historic data. If None, it is estimated by this object. The default is None.
 
         Returns
         -------
@@ -649,11 +716,127 @@ class cpd_online_MOSUM(cpd_online_CUSUM):
             The error signal's estimated standard deviation from k=0 to the current time.
 
         """
-        sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
-        (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
+        
+        if sigma_entries is None:
+            sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        if (error_norm_sq is None) or (error_norm_ij is None):
+            (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
         
         t = np.arange(1,self.k+1)
         win = np.minimum(self.win*np.ones_like(t),t)
+        
+        wmk = self.n*(win**self.exp)
+        
+        m_k = np.sum(sigma_entries)*win + error_norm_sq*(win**2)
+        m_k = m_k/wmk
+        
+        # var_k = residual_variance*(2*residual_variance*(k**2) + 4*error_norm_sq*(k**3))
+        var_k = 2*np.square(np.linalg.norm(sigma_entries,2))*(win**2) + 4*np.dot(sigma_entries,error_norm_ij)*(win**3)
+        var_k =var_k/wmk**2
+        #print(sigma_entries)
+        sigma_k = np.sqrt(var_k)
+        
+        return (m_k, sigma_k)
+    
+class cpd_online_expCUSUM(cpd_online_CUSUM):
+    """An online CUSUM algorithm for sequences of graphs. It keeps an exponentially weighted average
+    all previous signal errors (which may be either the gradient or the residual)."""
+    
+    def __init__(self, exp=3/2, hfun = 'grad', alpha=0.01):
+        """
+        It creates the  expCUSUM algorithm object. It will use a historic dataset to estimate the RDPG parameters 
+        (and the resulting connectivity matrix). As new graphs are input, a monitoring function is computed and 
+        an exponentially weighted sum is kept. 
+        When the frobenius norm of the weighted average exceeds a certain threshold, a CPD should be signalled. 
+
+        Parameters
+        ----------
+        exp : float, optional
+            The exponential to be used on the weights (wmk = n*(.k**.exp)). The default is 3/2.
+        hfun : str, optional
+            The type of monitoring function to use. Although both the residual ('resid') and the gradient ('grad') 
+            are valid, the former is preferred (and we've tested mostly with it) . The default is 'resid'.
+        alpha : float, optional
+            The weighting on the exponential sum (i.e. sum <- new_error + sum*(1-alpha)).
+
+        Returns
+        -------
+        None.
+
+        """        
+        cpd_online_CUSUM.__init__(self,exp, hfun)
+        self.historic_H = None
+        self.alpha = alpha
+        
+    def new_graph(self, g):
+        """
+        Input a new graph to the cusum object. I.e. it computes the corresponding monitoring function
+        and adds the result to the exponentially weighted error matrix. It returns the resulting weighted squared Frobenius norm
+        (np.linalg.norm(self.S)**2/wmk). Experimental and not tested. 
+
+        Parameters
+        ----------
+        g : A networkx graph. 
+            The new incoming graph.
+
+        Returns
+        -------
+        float
+            The new resulting statistic.
+
+        """
+        current_H = self.compute_current_H(g)
+        # weighted average
+        self.S = (1-self.alpha)*self.S + current_H
+        
+        # gamma = 0
+        self.k = self.k+1
+                
+        win = 1.0/self.alpha 
+        win = np.minimum(win,self.k)
+        wmk = self.n*(win**self.exp)
+        
+        return np.linalg.norm(self.S)**2/wmk
+    
+    def estimate_confidence_intervals(self, weighted=False, graphs=[], nboots=20, sigma_entries = None, error_norm_sq = None, error_norm_ij = None):
+        """
+        Given the current `k` state of the algorithm, it computes a whole confidence interval from 
+        0 to k (current time). Experimental and not tested. 
+
+        Parameters
+        ----------
+        weighted : bool, optional
+            Whether the graphs are weighted. The default is False.
+        graphs : list of networkx graphs, optional
+            The historic dataset, which we are not keeping as a class attribute. The default is [].
+        nboots : int, optional
+            The number of iterations to estimate the errors involved. The default is 20.
+        sigma_entries : numpy array of shape (n,n), optional
+            The variance of the adjancecy matrix. If None, it is estimated by this object. The default is None.
+        error_norm_sq : float, optional
+            The squared frobenius norm of the difference between the actual probability matrix and the 
+            one inferred from the historic data. If None, it is estimated by this object. The default is None.
+        error_norm_ij : numpy array of shape (n*(n-1)/2,) (if undirected) or (n*(n-1)) (if directed). 
+            The square of the difference between the actual probability matrix and the one inferred from the 
+            historic data. If None, it is estimated by this object. The default is None.
+
+        Returns
+        -------
+        m_k : 1-d numpy array. 
+            The error signal's estimated mean from k=0 to the current time.
+        sigma_k : 1-d numpy array.
+            The error signal's estimated standard deviation from k=0 to the current time.
+
+        """
+        
+        if sigma_entries is None:
+            sigma_entries = self.estimate_adjacency_variance(weighted=weighted, graphs=graphs)
+        if (error_norm_sq is None) or (error_norm_ij is None):
+            (error_norm_sq, error_norm_ij) = self.cross_validate_model_error(graphs, nboots)
+        
+        t = np.arange(1,self.k+1)
+        win = 2.0/self.alpha - 1 
+        win = np.minimum(win*np.ones_like(t),t)
         
         wmk = self.n*(win**self.exp)
         
