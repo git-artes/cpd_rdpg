@@ -17,10 +17,31 @@ from itertools import cycle
 COLOR_CYCLE = ["#4286f4", "#f44174"]
 
 class nbs():
+    """
+    An implementation of the Nonparametric Binary Segmentation (NBS) algorithm introduced in 
+    "Optimal nonparametric change point detection and localization" by Oscar Hernan Madrid Padilla, 
+    Yi Yu, Daren Wang, and Alessandro Rinaldo, arXiv:1905.10019 [stat.ME]. 
+    """
+    
     def __init__(
         self,
         tau
     ):
+        """
+        Create a NBS algorithm object. We basically provide the threshold to declare a change-point. 
+
+        Parameters
+        ----------
+        tau : float
+            The threshold to declare a change-point. How to set this value is discussed in the paper, 
+            although we did not implement any automatic method. In practice, a fraction of np.log(T*n/2)
+            works reasonably well, although some iterations may be needed. 
+
+        Returns
+        -------
+        None.
+
+        """
         self.tau = tau
         self.estimated_change_points = []
         self.flag = 0
@@ -50,6 +71,18 @@ class nbs():
     def compute_statistic(self,s,e):
         """
         Computes the D^t_{s,e} statistic for all t between s+1 and e-1 and outputs the maximum. 
+
+        Parameters
+        ----------
+        s : int
+            The starting index of this interval.
+        e : int
+            The ending index of this interval.
+
+        Returns
+        -------
+        (statistic, t_aster): the maximum statistic and its index. 
+
         """
         
 #        Y = self.Y[s:e+1,:]
@@ -68,6 +101,8 @@ class nbs():
             
             nt = np.sum(self.nt[0:t])
             # Dt = np.sqrt( np.sum(self.nt[s:t+1])*np.sum(self.nt[t+1:e+1])/np.sum(self.nt[s:e+1]) )*np.max(np.abs(self.ecdf(s,t,e)))
+            
+            # I've used scipy's kolmogorov-smirnov test as it's much faster and easier to use. 
             (ksdist,pvalue) = scipy.stats.kstest(self.Y_concatenated[ns:nt],self.Y_concatenated[nt:ne])
             Dt = np.sqrt( np.sum(self.nt[s:t+1])*np.sum(self.nt[t+1:e+1])/np.sum(self.nt[s:e+1]) )*ksdist
             
@@ -76,11 +111,26 @@ class nbs():
                 statistic = Dt
                 t_aster = t
   
-        
         return (statistic, t_aster)
                 
         
     def find_segments(self,s,e):
+        """
+        Given an interval (s,e) of indexes, it searches for a change-point in it. 
+        If found, it will add it to the list of CPs and call itself again on the two resulting sub-intervals. 
+
+        Parameters
+        ----------
+        s : int
+            The lower limit of the interval.
+        e : int
+            The upper limit of the interval.
+
+        Returns
+        -------
+        None.
+
+        """
 #        print("s: "+str(s)+" e: "+str(e))
 #        while e-s>2 and self.flag==0:
         if e-s>2:
@@ -89,7 +139,7 @@ class nbs():
 #                self.flag = 1 # revisar esto del flag...
                 return
             else:
-#                print("encontre un cp en "+str(b)+" con un estadistico de "+str(a))
+#                print("found a cp en "+str(b)+" with a statistic of "+str(a))
                 self.estimated_change_points.append(b)
                 self.find_segments(s,b-1)
                 self.find_segments(b,e)
@@ -135,11 +185,37 @@ class nbs():
         return Fs-Fe
 
 class nwbs(nbs):
+    
+    """
+    An implementation of the Nonparametric Wild Binary Segmentation (NWBS) algorithm introduced in 
+    "Optimal nonparametric change point detection and localization" by Oscar Hernan Madrid Padilla, 
+    Yi Yu, Daren Wang, and Alessandro Rinaldo, arXiv:1905.10019 [stat.ME]. 
+    """
+    
     def __init__(
         self,
         tau, 
         M
     ):
+        """
+        Create a NWBS algorithm object. We basically provide the threshold to declare a change-point and the number of 
+        random intervals to pick. 
+
+
+        Parameters
+        ----------
+        tau : float
+            The threshold to declare a change-point. How to set this value is discussed in the paper, 
+            although we did not implement any automatic method. In practice, a fraction of np.log(T*n/2)
+            works reasonably well, although some iterations may be needed. 
+        M : int
+            Number of random intervals to consider.
+
+        Returns
+        -------
+        None.
+
+        """
         nbs.__init__(self,tau)
         self.M = M
         
@@ -149,13 +225,13 @@ class nwbs(nbs):
 
         Parameters
         ----------
-        Y : array_like of shape (T,n)
+        Y : array-like of shape (T,n)
             Data to detect changepoints.
 
         Returns
         -------
-        self : object
-            Returns an instance of self.
+        None. 
+        
         """
         super().fit(Y)
 #        self.Y = Y
@@ -166,6 +242,24 @@ class nwbs(nbs):
                 
         
     def find_segments(self,s,e):
+        """
+        Given an index interval (s,e), it checks whether a change-point is detected in it. If so, it calls itself
+        again on the resulting two sub-intervals. Note that we followed the original Wild Binary Segmentation algorithm
+        regarding the random intervals: for each step we check only those random intervals strictly in (s,e). The printing
+        may be commented out, but it truly helps on setting the threshold tau. 
+
+        Parameters
+        ----------
+        s : int
+            Start of the interval.
+        e : int
+            End of the interval.
+
+        Returns
+        -------
+        None.
+
+        """
         print("s: "+str(s)+" e: "+str(e))
         list_a = []
         list_b = []
@@ -183,39 +277,61 @@ class nwbs(nbs):
                     list_b.append(bm)
                 # if len(list_a)>0:
                     # print("sm: "+str(sm)+" em: "+str(em)+ " max statistic: "+str(np.max(list_a))+ " en "+str(list_b[np.argmax(list_a)]))
-                    print("interval: "+str(interval)+ " sm: "+str(sm)+" em: "+str(em)+ " max statistic: "+str(am)+ " en "+str(bm))
+                    print("interval: "+str(interval)+ " sm: "+str(sm)+" em: "+str(em)+ " max statistic: "+str(am)+ " in "+str(bm))
         if len(list_a)>0:
             m_aster = np.argmax(list_a)
             a = list_a[m_aster]
             b = list_b[m_aster]
             
             if a>self.tau:
-                print("encontre un cp en "+str(b)+" con un estadistico de "+str(a))
+                print("found a cp in "+str(b)+" with a statistic of "+str(a))
                 self.estimated_change_points.append(b)
                 self.find_segments(s,b-1)
                 self.find_segments(b,e)
             else:
-                print("rechace el cp en "+str(b)+" porque "+str(a)+" es mas chico que "+str(self.tau))
+                print("I've rejected the cp in "+str(b)+" because "+str(a)+" is smaller than "+str(self.tau))
                 
 #        return self.estimated_change_points
 
 class nrdpgwbs(nwbs):
-
+    
+    """
+    An implementation of the Nonparametric RDPG Wild Binary Segmentation (NRDPGWBS) algorithm introduced in 
+    "Change point localization in dependent dynamic nonparametric random dot product graphs" by 
+    Oscar Hernan Madrid Padilla, Yi Yu, Carey E. Priebe, arXiv:1911.07494 [stat.ME]. 
+    """
             
     def __init__(
         self,
         tau, 
-        M, 
-        d=10
+        M
     ):
+        """
+        Create a NRDPGWBS algorithm object. We basically provide the threshold to declare a change-point and the number of 
+        random intervals to pick. Note that the embedding's dimensions is automatically picked by the embedding method for 
+        each time-step. 
+
+        Parameters
+        ----------
+        tau : float
+            he threshold to declare a change-point. How to set this value is discussed in the paper, 
+            although we did not implement any automatic method. In practice, a fraction of np.log(T*n/2)
+            works reasonably well, although some iterations may be needed.
+        M : int
+            The number of intervals to consider.
+
+        Returns
+        -------
+        None.
+
+        """
         nwbs.__init__(self,tau,M)
         
-        # the embedding method
-        self.d = d
-        # self.ase = gy.embed.AdjacencySpectralEmbed(n_components=1)
+        # self.ase = gy.embed.AdjacencySpectralEmbed(n_components=d)
+        # we've used the full algorithm as it provides more reliable results. 
         self.ase = gy.embed.AdjacencySpectralEmbed(n_elbows=2, algorithm='full')
         
-    def fit(self,graphs,nodes=None,dims=None,outin='both',shuffle=False):
+    def fit(self,graphs,nodes=None,outin='both',shuffle=False):
         """
         Load graphs (and embed them), initialize changepoint array and choose random intervals.
 
@@ -225,9 +341,7 @@ class nrdpgwbs(nwbs):
             Data to detect changepoints. Graphs should have the same set of nodes or else a list of nodes should be 
             specified in the nodes parameter (nothing checked).
         nodes : list with array-likes with the nodes' index. The nodes to consider on the statistic (all nodes are 
-            considered in the embedding). Default: all nodes are used. 
-        dims : array-like. The dimensions of the embedding to be used in the statistic. All values should 
-            be smaller than self.d (not checked). Default: all dimensions are used. 
+            considered in the embedding). Note that nodes are ordered with np.sort. Default: all nodes are used. 
         outin : either 'both', 'out' or 'in'. If the graph is directional, it will use either both embeddings, 
             only the out-degree or the in-degree one.
         shuffle : choose a random selection of node pairs or just the diagonal as in the original paper. 
@@ -240,9 +354,9 @@ class nrdpgwbs(nwbs):
         
         T = len(graphs)
                 
-        if dims is None:
-            # if no dims are specified, i'll use them all
-            dims = np.arange(self.d)
+        # if dims is None:
+        #     # if no dims are specified, i'll use them all
+        #     dims = np.arange(self.d)
         if nodes is None:
 #            n = graphs[0].number_of_nodes()
 #            nodes = np.tile(np.arange(n),(T,1))
@@ -258,24 +372,21 @@ class nrdpgwbs(nwbs):
 #        Y = np.zeros((T,int(np.floor(n/2))))
         Y = [np.zeros(int(np.floor(num_nodes/2))) for num_nodes in n]
         for t in np.arange(T):
-            g = nx.to_numpy_array(graphs[t])
+            g = nx.to_numpy_array(graphs[t],nodelist=np.sort(graphs[t].nodes))
+            # g = nx.to_numpy_array(graphs[t])
             g = gy.utils.augment_diagonal(g)
             Xhats = self.ase.fit_transform(g)
             if (type(Xhats)!=tuple):
                 Xhat = Xhats
-                # el grafo no era direccional y tengo un solo Xhat
+                # The graph was not direction and I have a single embedding
                 (w,v) = scipy.sparse.linalg.eigs(g, k=Xhat.shape[1],which='LM')
-                #I sort the eigenvalues in magnitude (to make it coherent with the embedding)
-                # TODO if there is a tie??? SOLVED
+                # I sort the eigenvalues in magnitude (to make it coherent with the embedding)
+                # and solve ties by their sign
                 # w = w[np.argsort(-abs(w))]
                 wabs = np.array(list(zip(-np.abs(w), -np.sign(np.real(w)))), dtype=[('abs', 'f4'), ('sign', 'i4')])
                 w = w[np.argsort(wabs,order=['abs','sign'])]
-                #    print(w)
+
                 # I use gRDPG
-                
-    #            statistic = np.matmul(np.sign(w)*Xhat,Xhat.T)
-    #            statistic = np.matmul(np.sign(np.real(w))*Xhat,Xhat.T)
-                
                 # statistic = np.matmul(np.sign(np.real(w[dims]))*Xhat[:,dims][nodes[t]],Xhat[:,dims][nodes[t]].T)
                 statistic = np.matmul(np.sign(np.real(w[:]))*Xhat[:,:][nodes[t]],Xhat[:,:][nodes[t]].T)
                 # TODO the theory says I should ignore a random node completely if n is odd. 
@@ -315,6 +426,22 @@ class nrdpgwbs(nwbs):
         super(nrdpgwbs, self).fit(Y)
         
 def normalize_rdpg_directive(Xhatl,Xhatr):
+    """
+    An auxiliary function to normalize embeddings of directional graphs. 
+
+    Parameters
+    ----------
+    Xhatl : an array-like with the left embeddings
+        
+    Xhatr : an array-like with the right embeddings
+        
+
+    Returns
+    -------
+    Xhatl : the normalized left embedding.
+    Xhatr : the normalized right embeddings. 
+
+    """
     dims = Xhatl.shape[1]
     for d in np.arange(dims):
         factor = np.sqrt(np.max(Xhatl[:,d])/np.max(Xhatr[:,d]))
