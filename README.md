@@ -11,4 +11,5 @@ It depends on libraries typically available on most modern Python distributions 
 We have included the main modules and some simple examples we've used to generate some of the graphs of the associated papers. Additionally, we have included some examples that use real datasets and both online and offline methods: 
 
 - `cpd_example_football_conmebol.py`. It considers graphs with the yearly number of matches played between football national teams of South America. The dataset was obtained from [https://www.eloratings.net/](https://www.eloratings.net/). You may download the csv we prepared from [this link](https://www.fing.edu.uy/owncloud/index.php/s/V2tk4MxZxAvNidx/download).
+- `cpd_example_reality_mining.py`. It considers graphs with the daily time that two people have shared a certain base-station, obtained from the study [http://realitycommons.media.mit.edu/realitymining.html](http://realitycommons.media.mit.edu/realitymining.html). You should download the dataset and then process it using [https://github.com/j2kun/reality-mining](https://github.com/j2kun/reality-mining). 
 
